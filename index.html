@@ -2,17 +2,18 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
 <title>Student Separation</title>
 <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
 <style>
-*{margin:0;padding:0;box-sizing:border-box}
-body{background:#888;display:flex;justify-content:center;align-items:flex-start;min-height:100vh;font-family:Georgia,serif;padding:20px 0}
-#game-container{position:relative;width:1200px;height:600px;overflow:hidden;flex-shrink:0}
+*{margin:0;padding:0;box-sizing:border-box;touch-action:none}
+body{background:#888;display:flex;justify-content:center;align-items:center;width:100vw;height:100vh;overflow:hidden;font-family:Georgia,serif}
+#game-container{position:relative;width:1200px;height:600px;overflow:hidden;flex-shrink:0;transform-origin:center center}
 canvas{display:block;width:1200px;height:600px}
 .overlay{position:absolute;top:0;left:0;width:100%;height:100%;background:#C5F7D9;display:flex;flex-direction:column;align-items:center;justify-content:center}
 .big-title{font-family:Impact,Arial Black,sans-serif;font-size:72px;text-shadow:3px 3px #fff;margin-bottom:18px;text-align:center}
 .mid-title{font-family:Impact,Arial Black,sans-serif;font-size:56px;margin-bottom:18px;text-align:center}
-.mbtn{width:840px;height:90px;background:#FEFFE8;border:1px solid #bbb;border-radius:7px;font-family:Georgia,serif;font-size:28px;cursor:pointer;margin:5px 0;display:flex;align-items:center;justify-content:center}
+.mbtn{width:min(840px,90%);height:90px;background:#FEFFE8;border:1px solid #bbb;border-radius:7px;font-family:Georgia,serif;font-size:28px;cursor:pointer;margin:5px 0;display:flex;align-items:center;justify-content:center}
 .mbtn:hover{background:#FFCF9C}
 .sbtn{width:200px;height:60px;background:#FEFFE8;border:1px solid #bbb;border-radius:7px;font-family:Georgia,serif;font-size:20px;cursor:pointer;margin-top:16px}
 .sbtn:hover{background:#FFCF9C}
@@ -42,7 +43,8 @@ canvas{display:block;width:1200px;height:600px}
   <div id="game-container">
 
     <canvas ref="cvs" width="1200" height="600"
-      @mousedown="onMD" @mousemove="onMM" @mouseup="onMU" @mouseleave="onMU">
+      @mousedown="onMD" @mousemove="onMM" @mouseup="onMU" @mouseleave="onMU"
+      @touchstart.prevent="onTD" @touchmove.prevent="onTM" @touchend.prevent="onTU">
     </canvas>
 
     <!-- STATE -1: Instructions -->
@@ -722,6 +724,18 @@ createApp({
       if (this._dragX > 350+h && this._dragX < 850-h) nd.x = this._dragX;
       if (this._dragY > 100+h && this._dragY < 500-h) nd.y = this._dragY;
     },
+
+    // ── Touch event handlers (delegate to existing mouse logic) ───────────────
+    onTD(e) {
+      const t = e.touches[0] || e.changedTouches[0];
+      this.onMD({ clientX: t.clientX, clientY: t.clientY });
+    },
+    onTM(e) {
+      if (!this._locked) return;
+      const t = e.touches[0];
+      if (t) this.onMM({ clientX: t.clientX, clientY: t.clientY });
+    },
+    onTU() { this.onMU(); },
   },
 
   mounted() {
@@ -757,10 +771,20 @@ createApp({
     this._practiceNodes = [];
     this._simNodes   = [];
     this._raf = requestAnimationFrame(() => this.loop());
+
+    // Scale container to fit viewport on load and resize
+    const applyScale = () => {
+      const s = Math.min(window.innerWidth / 1200, window.innerHeight / 600);
+      document.getElementById('game-container').style.transform = `scale(${s})`;
+    };
+    applyScale();
+    window.addEventListener('resize', applyScale);
+    this._applyScale = applyScale;
   },
 
   beforeUnmount() {
     cancelAnimationFrame(this._raf);
+    window.removeEventListener('resize', this._applyScale);
   }
 }).mount('#app');
 </script>
