@@ -1,0 +1,768 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Student Separation</title>
+<script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#888;display:flex;justify-content:center;align-items:flex-start;min-height:100vh;font-family:Georgia,serif;padding:20px 0}
+#game-container{position:relative;width:1200px;height:600px;overflow:hidden;flex-shrink:0}
+canvas{display:block;width:1200px;height:600px}
+.overlay{position:absolute;top:0;left:0;width:100%;height:100%;background:#C5F7D9;display:flex;flex-direction:column;align-items:center;justify-content:center}
+.big-title{font-family:Impact,Arial Black,sans-serif;font-size:72px;text-shadow:3px 3px #fff;margin-bottom:18px;text-align:center}
+.mid-title{font-family:Impact,Arial Black,sans-serif;font-size:56px;margin-bottom:18px;text-align:center}
+.mbtn{width:840px;height:90px;background:#FEFFE8;border:1px solid #bbb;border-radius:7px;font-family:Georgia,serif;font-size:28px;cursor:pointer;margin:5px 0;display:flex;align-items:center;justify-content:center}
+.mbtn:hover{background:#FFCF9C}
+.sbtn{width:200px;height:60px;background:#FEFFE8;border:1px solid #bbb;border-radius:7px;font-family:Georgia,serif;font-size:20px;cursor:pointer;margin-top:16px}
+.sbtn:hover{background:#FFCF9C}
+.credits{position:absolute;bottom:12px;right:12px;font-size:12px;color:#444;text-align:right;line-height:1.4}
+.instr-body{font-size:17px;text-align:center;max-width:860px;line-height:1.65;margin-bottom:12px}
+.instr-rowdy{color:#aa0000;font-size:17px;text-align:center;max-width:860px;margin-bottom:10px}
+.end-box{position:absolute;top:50px;left:200px;width:800px;height:500px;background:rgba(255,255,255,0.9);border-radius:12px;display:flex;flex-direction:column;align-items:center;justify-content:center}
+.end-box h2{font-size:50px;margin-bottom:18px}
+.end-box p{font-size:28px;margin:8px 0}
+/* pass-through overlays for states 5 & 6 */
+.game-overlay{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;display:flex;flex-direction:column;align-items:center}
+.game-overlay-title{font-family:Impact,Arial Black,sans-serif;font-size:42px;text-align:center;position:absolute;top:8px;left:0;right:0;pointer-events:none}
+.game-overlay-btn{pointer-events:all;width:200px;height:70px;background:#FEFFE8;border:1px solid #bbb;border-radius:7px;font-family:Georgia,serif;font-size:18px;cursor:pointer;position:absolute;bottom:14px;left:50%;transform:translateX(-50%)}
+.game-overlay-btn:hover{background:#FFCF9C}
+/* state dots */
+.sdots{display:flex;gap:7px;position:absolute;bottom:10px;left:12px;pointer-events:none}
+.sdot{width:13px;height:13px;border-radius:50%;background:#111}
+.sdot.active{background:#e0e0e0}
+/* custom form */
+.custom-wrap{width:560px}
+.custom-wrap label{display:block;font-size:15px;margin:7px 0 2px}
+.custom-wrap input[type=range]{width:100%}
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="game-container">
+
+    <canvas ref="cvs" width="1200" height="600"
+      @mousedown="onMD" @mousemove="onMM" @mouseup="onMU" @mouseleave="onMU">
+    </canvas>
+
+    <!-- STATE -1: Instructions -->
+    <div v-if="state===-1" class="overlay">
+      <div class="mid-title" style="font-size:38px">Student Separation Instructions</div>
+      <p class="instr-body">
+        You are an overworked teacher in Calgary.<br><br>
+        Administration has hired an additional teacher to teach half of your class.<br><br>
+        You are given the task of separating your students into two equally sized classrooms
+        while not breaking up the strong friendships that have formed over the years.<br><br>
+        Can you sort your kids better than the computer does before the deadline hits?<br><br>
+        Make students happy by grouping them with their friends!<br>
+        Make teachers happy by having equally sized classrooms!<br>
+        Get the best overall score before the timer runs out!
+      </p>
+      <p v-if="gameModifier===1" class="instr-rowdy">
+        Some students distract the whole class when paired together — keep them apart to maximise happiness!
+      </p>
+      <button class="sbtn" @click="setState(5)">Continue</button>
+      <div class="credits">ENCM PROJECT PHASE 2<br>LUKE RENAUD - ROBERT KRIVELIS</div>
+      <div class="sdots">
+        <div v-for="i in 5" :key="i" class="sdot" :class="{active:dotIdx()===i}"></div>
+      </div>
+    </div>
+
+    <!-- STATE 0: Main Menu -->
+    <div v-if="state===0" class="overlay">
+      <div class="big-title">Student Separation</div>
+      <button class="mbtn" @click="startRegular()">1.&nbsp; Separate kids based on friendships</button>
+      <button class="mbtn" @click="startRowdy()">2.&nbsp; Separate kids who distract each other</button>
+      <button class="mbtn" @click="openCustom()">3.&nbsp; Customize simulated annealing</button>
+      <div class="credits">ENCM PROJECT PHASE 2<br>LUKE RENAUD - ROBERT KRIVELIS</div>
+      <div class="sdots">
+        <div v-for="i in 5" :key="i" class="sdot" :class="{active:dotIdx()===i}"></div>
+      </div>
+    </div>
+
+    <!-- STATE 2: Difficulty -->
+    <div v-if="state===2" class="overlay">
+      <div class="mid-title">Select Difficulty</div>
+      <button class="mbtn" @click="pickDiff(0)">1.&nbsp; Easy</button>
+      <button class="mbtn" @click="pickDiff(1)">2.&nbsp; Medium</button>
+      <button class="mbtn" @click="pickDiff(2)">3.&nbsp; Hard</button>
+      <div class="credits">ENCM PROJECT PHASE 2<br>LUKE RENAUD - ROBERT KRIVELIS</div>
+      <div class="sdots">
+        <div v-for="i in 5" :key="i" class="sdot" :class="{active:dotIdx()===i}"></div>
+      </div>
+    </div>
+
+    <!-- STATE 3: End Game -->
+    <div v-if="state===3" class="end-box">
+      <h2>{{ playerScore >= computerScore ? 'You win!' : 'Computer wins!' }}</h2>
+      <p>Your Combined Happiness: {{ playerScore }}%</p>
+      <p>Computer's Combined Happiness: {{ computerScore }}%</p>
+      <button class="sbtn" style="margin-top:28px" @click="returnMenu()">Main Menu</button>
+    </div>
+
+    <!-- STATE 4: Custom SA params -->
+    <div v-if="state===4" class="overlay">
+      <div class="mid-title" style="font-size:40px">Custom Simulated Annealing</div>
+      <div class="custom-wrap">
+        <label>Nodes (1–25): <strong>{{ cNodes }}</strong>
+          <input type="range" min="1" max="25" step="1" v-model.number="cNodes"></label>
+        <label>Initial Temperature % (1–99): <strong>{{ cTInit }}</strong>
+          <input type="range" min="1" max="99" step="1" v-model.number="cTInit"></label>
+        <label>Min Temperature % (0.0001–10): <strong>{{ cTMin }}</strong>
+          <input type="range" min="0.0001" max="10" step="0.0001" v-model.number="cTMin"></label>
+        <label>Cooling Rate (0.90–0.999): <strong>{{ cCool }}</strong>
+          <input type="range" min="0.90" max="0.999" step="0.001" v-model.number="cCool"></label>
+        <label>Game Mode — 0 = friends, 1 = rowdy: <strong>{{ cMode }}</strong>
+          <input type="range" min="0" max="1" step="1" v-model.number="cMode"></label>
+        <label>Time Modifier (0.1–1.0): <strong>{{ cTimerMod }}</strong>
+          <input type="range" min="0.1" max="1.0" step="0.05" v-model.number="cTimerMod"></label>
+      </div>
+      <button class="sbtn" @click="applyCustom()">Start</button>
+      <div class="sdots">
+        <div v-for="i in 5" :key="i" class="sdot" :class="{active:dotIdx()===i}"></div>
+      </div>
+    </div>
+
+    <!-- STATE 5: Practice overlay (canvas renders play area) -->
+    <div v-if="state===5" class="game-overlay">
+      <div class="game-overlay-title">Practice moving students!</div>
+      <button class="game-overlay-btn" @click="goDemo()">Continue</button>
+      <div class="sdots">
+        <div v-for="i in 5" :key="i" class="sdot" :class="{active:dotIdx()===i}"></div>
+      </div>
+    </div>
+
+    <!-- STATE 6: SA Demo overlay (canvas renders demo) -->
+    <div v-if="state===6" class="game-overlay">
+      <div class="game-overlay-title">Watch how simulated annealing works!</div>
+      <button class="game-overlay-btn" @click="goGame()">Try to beat<br>Simulated Annealing!</button>
+      <div class="sdots">
+        <div v-for="i in 5" :key="i" class="sdot" :class="{active:dotIdx()===i}"></div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+const { createApp } = Vue;
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
+const rInt = (a, b) => Math.floor(Math.random() * (b - a + 1)) + a;
+const rCol = () => ({ r: rInt(100,255), g: rInt(100,255), b: rInt(100,255) });
+const mkNode = () => ({ id:0, x:-100, y:-100, size:0, partition:'c', connections:[], anticonnections:[], color:{r:0,g:0,b:0} });
+const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+
+createApp({
+  // ── Reactive data (only what the HTML template actually reads) ─────────────
+  data() {
+    return {
+      state: 0,
+      gameModifier: 0,
+      playerScore: 0,
+      computerScore: 0,
+      // custom-param sliders (state 4)
+      cNodes: 15, cTInit: 99, cTMin: 0.01, cCool: 0.98, cMode: 0, cTimerMod: 0.7,
+    };
+  },
+
+  methods: {
+    // ── State machine ─────────────────────────────────────────────────────────
+    setState(s) {
+      this.state = s;
+      this._needsSetup = true;
+    },
+
+    dotIdx() {
+      const m = { 0:1, '-1':3, 2:2, 4:2, 5:4, 6:5 };
+      return m[String(this.state)] ?? 0;
+    },
+
+    doOnce() {
+      if (!this._needsSetup) return;
+      this._needsSetup = false;
+      if (this.state === 1) this.setupGame();
+      else if (this.state === 5) this.setupPractice();
+      else if (this.state === 6) this.setupSimDemo();
+    },
+
+    // ── State transitions ─────────────────────────────────────────────────────
+    startRegular() { this.gameModifier = 0; this.setState(2); },
+    startRowdy()   { this.gameModifier = 1; this.setState(2); },
+    openCustom()   { this.setState(4); },
+
+    pickDiff(i) {
+      this._diff = [5,10,15][i];
+      this._timerMod = [0.5,0.7,0.9][i];
+      this.setState(-1);
+    },
+
+    goDemo() { this._n = this._diff; this.setState(6); },
+    goGame() { this._n = this._diff; this.setState(1); },
+
+    applyCustom() {
+      this._diff = this.cNodes; this._n = this.cNodes;
+      this._tInitP = this.cTInit; this._tMinP = this.cTMin;
+      this._coolRate0 = this.cCool; this._timerMod = this.cTimerMod;
+      this.gameModifier = this.cMode;
+      this.setState(1);
+    },
+
+    endGame() {
+      this.playerScore   = Math.round(this.cost(this._nodes));
+      this.computerScore = Math.round(this.cost(this._compNodes));
+      this.setState(3);
+    },
+
+    returnMenu() {
+      this._paused = false;
+      this._timerBarY = 100; this._timerBarH = 400;
+      this.setState(0);
+    },
+
+    // ── SA & scoring ──────────────────────────────────────────────────────────
+    calcBalance(nodes) {
+      let a = 0;
+      for (let i = 0; i < this._n; i++) if (nodes[i].partition === 'a') a++;
+      return Math.round(a / this._n * 100);
+    },
+
+    calcCuts(nodes) {
+      let nc = 0;
+      for (let i = 0; i < this._n; i++)
+        for (const j of nodes[i].connections)
+          if (nodes[i].partition !== nodes[j].partition) nc++;
+      return nc;
+    },
+
+    calcAntiCuts(nodes) {
+      let nc = 0;
+      for (let i = 0; i < this._n; i++)
+        for (const j of nodes[i].anticonnections)
+          if (nodes[i].partition !== nodes[j].partition) nc++;
+      return nc;
+    },
+
+    cost(nodes) {
+      const bal = this.calcBalance(nodes), cuts = this.calcCuts(nodes);
+      if (this.gameModifier === 1)
+        return Math.trunc(70 - Math.abs(50 - bal) - 10*cuts + 10*this.calcAntiCuts(nodes));
+      return Math.trunc(100 - Math.abs(50 - bal) - 10*cuts);
+    },
+
+    perturb(nodes) {
+      const i = Math.floor(Math.random() * this._n);
+      const bal = this.calcBalance(nodes);
+      const step = 1.0 / this._n * 100;
+      if (nodes[i].partition === 'a' && bal - step > 20) {
+        nodes[i].partition = 'b'; nodes[i].x += 250; this._lastMoved = i;
+      } else if (nodes[i].partition === 'b' && (100 - bal) - step > 20) {
+        nodes[i].partition = 'a'; nodes[i].x -= 250; this._lastMoved = i;
+      }
+      this.collide(nodes);
+    },
+
+    saStep(nodes) {
+      if (this._T > this._Tmin) {
+        this._iter++;
+        this.copyArr(this._newParts, nodes);
+        this.perturb(this._newParts);
+        const delta = this.cost(nodes) - this.cost(this._newParts);
+        if (delta < 0) {
+          this.copyArr(nodes, this._newParts);
+          if (this.cost(this._bestParts) - this.cost(this._newParts) < 0)
+            this.copyArr(this._bestParts, this._newParts);
+        } else if (delta > 0 && Math.random() < Math.exp(-delta / this._T)) {
+          this.copyArr(nodes, this._newParts);
+        }
+        this._T *= this._coolRate;
+        if (this._T > 0 && Math.exp(-this._avgDelta / this._T) < 0.1)
+          this._coolRate = 0.99;
+      } else {
+        if (this.cost(this._bestParts) - this.cost(nodes) > 0)
+          this.copyArr(nodes, this._bestParts);
+      }
+    },
+
+    calibrate(nodes) {
+      this.copyArr(this._newParts, nodes);
+      this.copyArr(this._bestParts, nodes);
+      this._avgDelta = 0;
+      const cr = this._coolRate;
+      for (let i = 0; i < 3; i++) {
+        this.perturb(this._newParts);
+        const delta = this.cost(nodes) - this.cost(this._newParts);
+        this._avgDelta += Math.abs(delta) / 3;
+        if (delta < 0) this.copyArr(nodes, this._newParts);
+        else if (Math.random() < Math.exp(-delta / 100000)) this.copyArr(nodes, this._newParts);
+      }
+      const ad = this._avgDelta || 1;
+      const cr3 = Math.pow(cr, 3);
+      this._T    = -ad / Math.log(this._tInitP / 100) * cr3;
+      this._Tmin = -ad / Math.log(this._tMinP  / 100) * cr3;
+    },
+
+    // ── Node helpers ──────────────────────────────────────────────────────────
+    mkArr(n) {
+      const a = [];
+      for (let i = 0; i < n; i++) a.push(mkNode());
+      return a;
+    },
+
+    copyArr(dest, src) {
+      dest.length = 0;
+      for (let i = 0; i < this._n; i++)
+        dest.push({ ...src[i], connections:[...src[i].connections], anticonnections:[...src[i].anticonnections], color:{...src[i].color} });
+    },
+
+    collide(arr) {
+      const n = this._n;
+      for (let i = 0; i < n; i++) {
+        // forward pass: j = 0 .. i-2
+        for (let j = 0; j < i - 1; j++) {
+          let guard = 0;
+          while (Math.abs(arr[i].y-arr[j].y) < (arr[i].size+arr[j].size)/2 &&
+                 Math.abs(arr[i].x-arr[j].x) < (arr[i].size+arr[j].size)/2 &&
+                 guard++ < 30) {
+            const lo = Math.ceil(150 + arr[j].size/2), hi = Math.floor(500 - arr[j].size/2);
+            if (lo < hi) arr[j].y = rInt(lo, hi);
+            else break;
+          }
+        }
+        // backward pass: j = i-1 .. 1
+        for (let j = i - 1; j > 0; j--) {
+          let guard = 0;
+          while (Math.abs(arr[i].y-arr[j].y) < (arr[i].size+arr[j].size)/2 &&
+                 Math.abs(arr[i].x-arr[j].x) < (arr[i].size+arr[j].size)/2 &&
+                 guard++ < 30) {
+            const lo = Math.ceil(150 + arr[j].size/2), hi = Math.floor(500 - arr[j].size/2);
+            if (lo < hi) arr[j].y = rInt(lo, hi);
+            else break;
+          }
+        }
+      }
+    },
+
+    buildNodes(n) {
+      const arr = this.mkArr(n);
+      for (let i = 0; i < n; i++) {
+        arr[i].id   = i;
+        arr[i].size = Math.trunc(-1.2 * n + 50);
+        arr[i].color = rCol();
+        if (Math.random() < 0.5) {
+          arr[i].partition = 'a';
+          arr[i].x = rInt(50 + arr[i].size, 300 - arr[i].size);
+          arr[i].y = rInt(150 + arr[i].size, 500 - arr[i].size);
+        } else {
+          arr[i].partition = 'b';
+          arr[i].x = rInt(300 + arr[i].size, 550 - arr[i].size);
+          arr[i].y = rInt(150 + arr[i].size, 500 - arr[i].size);
+        }
+        this.collide(arr);
+      }
+      for (let i = 0; i < n; i++) {
+        if (this.gameModifier === 0 || Math.random() < 0.8) {
+          let c = Math.floor(Math.random() * n);
+          const limit = n * 10;
+          for (let t = 0; arr[i].connections.includes(c) && t < limit; t++)
+            c = Math.floor(Math.random() * n);
+          arr[i].connections.push(c);
+        } else {
+          let c = Math.floor(Math.random() * n);
+          const limit = n * 10;
+          for (let t = 0; arr[i].anticonnections.includes(c) && t < limit; t++)
+            c = Math.floor(Math.random() * n);
+          arr[i].anticonnections.push(c);
+        }
+      }
+      return arr;
+    },
+
+    // ── Setup per state ───────────────────────────────────────────────────────
+    setupGame() {
+      this._n         = this._diff;
+      this._coolRate  = this._coolRate0;  // reset to base rate (may have been bumped to 0.99)
+      this._iter       = 0;
+      this._lastMoved  = 0;
+      this._paused     = false;
+      this._timerBarY  = 100;
+      this._timerBarH  = 400;
+      this._timerStart = performance.now();
+
+      this._newParts   = this.mkArr(this._n);
+      this._bestParts  = this.mkArr(this._n);
+
+      this._nodes      = this.buildNodes(this._n);
+      this._compNodes  = this._nodes.map(nd => ({ ...nd, x: nd.x + 600, connections:[...nd.connections], anticonnections:[...nd.anticonnections], color:{...nd.color} }));
+
+      this.calibrate(this._compNodes);
+    },
+
+    setupPractice() {
+      this._n = 2;
+      this._practiceNodes = [
+        { id:0, x:500, y:300, size:60, partition:'a', connections:[1], anticonnections:[], color:rCol() },
+        { id:1, x:700, y:300, size:60, partition:'b', connections:[],  anticonnections:[], color:rCol() },
+      ];
+    },
+
+    setupSimDemo() {
+      this._n         = this._diff;
+      this._coolRate  = this._coolRate0 ?? 0.98;
+      this._iter      = 0;
+      this._lastMoved = 0;
+      this._saCount   = 0;
+      this._newParts  = this.mkArr(this._n);
+      this._bestParts = this.mkArr(this._n);
+      this._simNodes  = this.buildNodes(this._n);
+      this.calibrate(this._simNodes);
+      for (let i = 0; i < this._n; i++) {
+        this._simNodes[i].x  += 300;
+        if (this._newParts[i]) this._newParts[i].x += 300;
+      }
+    },
+
+    // ── Game loop ─────────────────────────────────────────────────────────────
+    loop() {
+      const ctx = this._ctx;
+      this.doOnce();
+
+      if (this.state === 1)      this.draw1(ctx);
+      else if (this.state === 5) this.draw5(ctx);
+      else if (this.state === 6) this.draw6(ctx);
+      else { ctx.fillStyle='#C5F7D9'; ctx.fillRect(0,0,1200,600); }
+
+      this._raf = requestAnimationFrame(() => this.loop());
+    },
+
+    // ── Draw state 1 (active game) ────────────────────────────────────────────
+    draw1(ctx) {
+      this.drawPlayArea(ctx);
+      this.drawConns(ctx, this._nodes);
+      this.drawNodeSet(ctx, this._nodes);
+      this.drawSplit(ctx);
+      this.drawTimer(ctx);
+      if (!this._paused) this.saStep(this._compNodes);
+      this.drawConns(ctx, this._compNodes);
+      this.drawNodeSet(ctx, this._compNodes);
+      this.drawWords1(ctx);
+      this.drawPauseFinish(ctx);
+      this.applyDrag();
+    },
+
+    drawPlayArea(ctx) {
+      ctx.fillStyle = '#C5F7D9';
+      ctx.fillRect(0, 0, 1200, 600);
+      ctx.fillStyle = '#FFFFFF';
+      ctx.fillRect(50, 100, 500, 400);
+      // temperature-tinted right area
+      let r2 = 255, g2 = 255, b2 = 255;
+      if (this._T > 0 && this._avgDelta > 0) {
+        const x1 = this._avgDelta / (this._T * 2.75);
+        const x2 = this._avgDelta / this._T;
+        const e1 = Math.exp(-x1), e2 = Math.exp(-x2);
+        r2 = clamp(Math.round(255 - 1/e1), 0, 255);
+        g2 = clamp(Math.round(255 - 255*e2), 0, 255);
+        b2 = g2;
+      }
+      ctx.fillStyle = `rgb(${r2},${g2},${b2})`;
+      ctx.fillRect(650, 100, 500, 400);
+    },
+
+    drawSplit(ctx) {
+      ctx.strokeStyle = '#000'; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(300,100); ctx.lineTo(300,500); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(900,100); ctx.lineTo(900,500); ctx.stroke();
+    },
+
+    drawConns(ctx, nodes) {
+      if (!nodes?.length) return;
+      ctx.lineWidth = 1;
+      for (const nd of nodes) {
+        ctx.strokeStyle = '#000';
+        for (const j of nd.connections) {
+          if (!nodes[j]) continue;
+          ctx.beginPath(); ctx.moveTo(nd.x,nd.y); ctx.lineTo(nodes[j].x,nodes[j].y); ctx.stroke();
+        }
+        if (this.gameModifier === 1) {
+          ctx.strokeStyle = 'rgb(200,0,0)';
+          for (const j of nd.anticonnections) {
+            if (!nodes[j]) continue;
+            ctx.beginPath(); ctx.moveTo(nd.x,nd.y); ctx.lineTo(nodes[j].x,nodes[j].y); ctx.stroke();
+          }
+        }
+      }
+    },
+
+    drawNodeSet(ctx, nodes) {
+      if (!nodes?.length) return;
+      ctx.lineWidth = 1;
+      for (const nd of nodes) {
+        const r = nd.size / 2;
+        ctx.fillStyle = `rgb(${nd.color.r},${nd.color.g},${nd.color.b})`;
+        ctx.strokeStyle = '#000';
+        ctx.beginPath(); ctx.arc(nd.x, nd.y, r, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+        // eyes (Processing circle uses diameter; size*0.1 diameter → size*0.05 radius)
+        ctx.fillStyle = '#000';
+        ctx.beginPath(); ctx.arc(nd.x - nd.size*0.2, nd.y - nd.size*0.25, nd.size*0.05, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.arc(nd.x + nd.size*0.2, nd.y - nd.size*0.25, nd.size*0.05, 0, Math.PI*2); ctx.fill();
+        // smile (Processing arc w=size*0.7 → radius=size*0.35)
+        ctx.beginPath(); ctx.arc(nd.x, nd.y, nd.size*0.35, 0, Math.PI); ctx.stroke();
+      }
+    },
+
+    drawTimer(ctx) {
+      // white bg
+      ctx.fillStyle = '#FFF';
+      ctx.fillRect(575, 100, 50, 400);
+      // red fill
+      ctx.fillStyle = 'rgb(230,50,50)';
+      ctx.fillRect(575, this._timerBarY, 50, this._timerBarH);
+      ctx.strokeStyle = '#000'; ctx.lineWidth = 1;
+      ctx.strokeRect(575, 100, 50, 400);
+      // advance (same formula as Processing: sqrt(millis()-timer)/100*modifier each frame)
+      if (!this._paused && this._timerBarH > 0) {
+        const elapsed = performance.now() - this._timerStart;
+        const delta   = Math.sqrt(elapsed) / 100 * this._timerMod;
+        this._timerBarH -= delta;
+        this._timerBarY += delta;
+        if (this._timerBarH <= 0) { this._timerBarH = 0; this.endGame(); }
+      }
+      ctx.fillStyle = '#000'; ctx.font = '13px Georgia';
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText('Time remaining', 600, 510);
+    },
+
+    drawWords1(ctx) {
+      if (!this._nodes?.length || !this._compNodes?.length) return;
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#000';
+      // titles
+      ctx.font = 'bold 34px Impact, Arial, sans-serif';
+      ctx.fillText('Player', 300, 50);
+      ctx.fillText('Simulated Annealing', 900, 50);
+      // partition labels
+      ctx.font = '14px Georgia';
+      ctx.fillText('A', 180, 150); ctx.fillText('B', 420, 150);
+      ctx.fillText('A', 780, 150); ctx.fillText('B', 1020, 150);
+      // scores
+      const pCuts  = this.calcCuts(this._nodes),  pBal  = this.calcBalance(this._nodes);
+      const cCuts  = this.calcCuts(this._compNodes), cBal = this.calcBalance(this._compNodes);
+      const pBalS  = Math.trunc(100 - Math.abs((pBal - 50)/50)*100);
+      const cBalS  = Math.trunc(100 - Math.abs((cBal - 50)/50)*100);
+      ctx.font = '18px Georgia';
+      ctx.fillText('Combined Happiness of Player: '   + this.cost(this._nodes)     + '%', 300, 520);
+      ctx.fillText('Combined Happiness of Computer: ' + this.cost(this._compNodes) + '%', 900, 520);
+      ctx.font = '13px Georgia';
+      ctx.fillText('Net cuts of Player: '   + pCuts, 175, 550);
+      ctx.fillText('Net cuts of Computer: ' + cCuts, 775, 550);
+      ctx.fillText('Happiness of Students: ' + (100 - pCuts*10) + '%', 200, 570);
+      ctx.fillText('Happiness of Students: ' + (100 - cCuts*10) + '%', 775, 570);
+      ctx.fillText('Happiness of Teachers: ' + pBalS + '%', 200, 590);
+      ctx.fillText('Happiness of Teachers: ' + cBalS + '%', 775, 590);
+      if (this.gameModifier === 1)
+        ctx.fillText('Rowdy Separated: ' + this.calcAntiCuts(this._nodes), 450, 570);
+      // SA stats (right column)
+      const tPct = this._T > 0 ? 100 * Math.exp(-this._avgDelta / this._T) : 0;
+      ctx.fillText('Iterations completed: '  + this._iter,          1025, 550);
+      ctx.fillText('Current Temperature: '   + tPct.toFixed(2) + '%', 1025, 570);
+      ctx.fillText('Temperature Minimum: '   + this._tMinP.toFixed(2) + '%', 1025, 590);
+    },
+
+    drawPauseFinish(ctx) {
+      const rrect = (x, y, w, h, r) => {
+        ctx.beginPath();
+        ctx.moveTo(x+r, y); ctx.lineTo(x+w-r, y); ctx.quadraticCurveTo(x+w,y,x+w,y+r);
+        ctx.lineTo(x+w,y+h-r); ctx.quadraticCurveTo(x+w,y+h,x+w-r,y+h);
+        ctx.lineTo(x+r,y+h); ctx.quadraticCurveTo(x,y+h,x,y+h-r);
+        ctx.lineTo(x,y+r); ctx.quadraticCurveTo(x,y,x+r,y); ctx.closePath();
+      };
+      // Pause: centered at (600, 540), 70×35
+      ctx.fillStyle = this._paused ? '#78A1BB' : '#FFC53A';
+      rrect(565, 522, 70, 35, 7); ctx.fill();
+      ctx.strokeStyle='#000'; ctx.lineWidth=1; ctx.stroke();
+      ctx.fillStyle='#000'; ctx.textAlign='center'; ctx.textBaseline='middle';
+      ctx.font = this._paused ? '13px Georgia' : '15px Georgia';
+      ctx.fillText(this._paused ? 'Unpause' : 'Pause', 600, 540);
+      // Finish: centered at (600, 580), 70×35
+      ctx.fillStyle = '#FFC53A';
+      rrect(565, 562, 70, 35, 7); ctx.fill();
+      ctx.strokeStyle='#000'; ctx.stroke();
+      ctx.fillStyle='#000'; ctx.font='15px Georgia';
+      ctx.fillText('Finish', 600, 580);
+    },
+
+    // ── Draw state 5 (practice) ───────────────────────────────────────────────
+    draw5(ctx) {
+      ctx.fillStyle = '#C5F7D9'; ctx.fillRect(0, 0, 1200, 600);
+      ctx.fillStyle = '#FFF'; ctx.fillRect(350, 100, 500, 400);
+      ctx.strokeStyle = '#000'; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(600,100); ctx.lineTo(600,500); ctx.stroke();
+      ctx.fillStyle = '#000'; ctx.font = '22px Georgia';
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText('A', 475, 150); ctx.fillText('B', 725, 150);
+      if (this._practiceNodes?.length === 2) {
+        this.drawConns(ctx, this._practiceNodes);
+        this.drawNodeSet(ctx, this._practiceNodes);
+        const cuts = this.calcCuts(this._practiceNodes);
+        const bal  = this.calcBalance(this._practiceNodes);
+        const balS = Math.trunc(100 - Math.abs((bal-50)/50)*100);
+        ctx.font = '17px Georgia';
+        ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+        ctx.fillStyle = cuts > 0 ? 'rgb(200,25,25)' : 'rgb(25,100,25)';
+        ctx.fillText('Broken Connections: ' + cuts, 40, 330);
+        ctx.fillStyle = balS < 100 ? 'rgb(200,25,25)' : 'rgb(25,100,25)';
+        ctx.fillText('Balance: ' + balS + '%', 40, 270);
+        this.applyPracticeDrag();
+      }
+    },
+
+    // ── Draw state 6 (SA demo) ────────────────────────────────────────────────
+    draw6(ctx) {
+      ctx.fillStyle = '#C5F7D9'; ctx.fillRect(0, 0, 1200, 600);
+      ctx.fillStyle = '#FFF'; ctx.fillRect(350, 100, 500, 400);
+      ctx.strokeStyle = '#000'; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(600,100); ctx.lineTo(600,500); ctx.stroke();
+      ctx.fillStyle = '#000'; ctx.font = '22px Georgia';
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText('A', 475, 150); ctx.fillText('B', 725, 150);
+      if (this._simNodes?.length) {
+        this.drawConns(ctx, this._simNodes);
+        this.drawNodeSet(ctx, this._simNodes);
+        // throttled SA
+        this._saCount = (this._saCount || 0) + 1;
+        if (this._saCount > 30) { this.saStep(this._simNodes); this._saCount = 0; }
+        // highlight last moved
+        if (this._lastMoved < this._simNodes.length) {
+          const nd = this._simNodes[this._lastMoved];
+          ctx.strokeStyle = 'rgb(255,0,0)'; ctx.lineWidth = 3;
+          ctx.beginPath(); ctx.arc(nd.x, nd.y, nd.size/2 + 3, 0, Math.PI*2); ctx.stroke();
+          ctx.strokeStyle = '#000'; ctx.lineWidth = 1;
+        }
+      }
+      // right panel stats
+      const sc = this._simNodes?.length ? this.cost(this._simNodes) : 0;
+      const tPct = this._T > 0 ? 100 * Math.exp(-this._avgDelta / this._T) : 0;
+      ctx.fillStyle = '#000'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.font = '26px Georgia';
+      ctx.fillText('Score: ' + sc + '%', 1000, 250);
+      ctx.font = '17px Georgia';
+      ctx.fillText('Iteration: ' + this._iter, 1000, 288);
+      ctx.fillText('Current Temperature: ' + tPct.toFixed(2) + '%', 1000, 318);
+      ctx.fillText('Temperature Minimum: ' + (this._tMinP||0.01).toFixed(2) + '%', 1000, 348);
+      // left explanation
+      ctx.font = '14px Georgia';
+      const lines = [
+        'Watch the red circle to see','which move was just taken.',
+        '','If temperature is high, a','move is more likely to be taken.',
+        '','When temperature is low,','more iterations happen','without moving a node.'
+      ];
+      lines.forEach((l, i) => ctx.fillText(l, 175, 240 + i*22));
+    },
+
+    // ── Input handling ────────────────────────────────────────────────────────
+    cvCoords(e) {
+      const rect = this.$refs.cvs.getBoundingClientRect();
+      return { x:(e.clientX-rect.left)*(1200/rect.width), y:(e.clientY-rect.top)*(600/rect.height) };
+    },
+
+    onMD(e) {
+      const {x,y} = this.cvCoords(e);
+      if (this.state === 1) {
+        // Pause button bbox
+        if (x>=565&&x<=635&&y>=522&&y<=557) { this._paused=!this._paused; return; }
+        // Finish button bbox
+        if (x>=565&&x<=635&&y>=562&&y<=597) { this._timerBarH=0; this.endGame(); return; }
+        for (let i=0; i<this._n; i++) {
+          const nd=this._nodes[i];
+          if (x>nd.x-nd.size/2&&x<nd.x+nd.size/2&&y>nd.y-nd.size/2&&y<nd.y+nd.size/2) {
+            this._locked=true; this._lockedIdx=i; this._dragX=x; this._dragY=y; return;
+          }
+        }
+      } else if (this.state===5) {
+        for (let i=0; i<2; i++) {
+          const nd=this._practiceNodes[i];
+          if (x>nd.x-nd.size/2&&x<nd.x+nd.size/2&&y>nd.y-nd.size/2&&y<nd.y+nd.size/2) {
+            this._locked=true; this._lockedIdx=i; this._dragX=x; this._dragY=y; return;
+          }
+        }
+      }
+    },
+
+    onMM(e) {
+      if (!this._locked) return;
+      const {x,y} = this.cvCoords(e);
+      this._dragX = x; this._dragY = y;
+    },
+
+    onMU() {
+      if (!this._locked) return;
+      if (this.state===1 && this._nodes?.[this._lockedIdx]) {
+        const nd = this._nodes[this._lockedIdx];
+        nd.partition = nd.x > 300 ? 'b' : 'a';
+        this.collide(this._nodes);
+      } else if (this.state===5 && this._practiceNodes?.[this._lockedIdx]) {
+        const nd = this._practiceNodes[this._lockedIdx];
+        nd.partition = nd.x > 600 ? 'b' : 'a';
+      }
+      this._locked = false; this._dragX = null; this._dragY = null;
+    },
+
+    applyDrag() {
+      if (!this._locked || this._dragX == null) return;
+      const nd = this._nodes[this._lockedIdx];
+      const h = nd.size / 2;
+      if (this._dragX > 50+h && this._dragX < 550-h) nd.x = this._dragX;
+      if (this._dragY > 100+h && this._dragY < 500-h) nd.y = this._dragY;
+    },
+
+    applyPracticeDrag() {
+      if (!this._locked || this._dragX == null) return;
+      const nd = this._practiceNodes[this._lockedIdx];
+      const h = nd.size / 2;
+      if (this._dragX > 350+h && this._dragX < 850-h) nd.x = this._dragX;
+      if (this._dragY > 100+h && this._dragY < 500-h) nd.y = this._dragY;
+    },
+  },
+
+  mounted() {
+    const canvas = this.$refs.cvs;
+    this._ctx = canvas.getContext('2d');
+    // non-reactive instance state
+    this._needsSetup = true;
+    this._diff       = 10;
+    this._n          = 10;
+    this._tInitP     = 99;
+    this._tMinP      = 0.01;
+    this._coolRate0  = 0.98;
+    this._coolRate   = 0.98;
+    this._timerMod   = 0.7;
+    this._T          = 1;
+    this._Tmin       = 0.001;
+    this._avgDelta   = 0;
+    this._iter       = 0;
+    this._lastMoved  = 0;
+    this._saCount    = 0;
+    this._paused     = false;
+    this._timerBarY  = 100;
+    this._timerBarH  = 400;
+    this._timerStart = 0;
+    this._locked     = false;
+    this._lockedIdx  = 0;
+    this._dragX      = null;
+    this._dragY      = null;
+    this._nodes      = [];
+    this._compNodes  = [];
+    this._newParts   = [];
+    this._bestParts  = [];
+    this._practiceNodes = [];
+    this._simNodes   = [];
+    this._raf = requestAnimationFrame(() => this.loop());
+  },
+
+  beforeUnmount() {
+    cancelAnimationFrame(this._raf);
+  }
+}).mount('#app');
+</script>
+</body>
+</html>
